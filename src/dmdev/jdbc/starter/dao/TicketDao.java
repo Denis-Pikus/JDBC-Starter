@@ -1,5 +1,6 @@
 package dmdev.jdbc.starter.dao;
 
+import dmdev.jdbc.starter.dto.TicketFilter;
 import dmdev.jdbc.starter.entity.Ticket;
 import dmdev.jdbc.starter.exception.DaoException;
 import dmdev.jdbc.starter.util.ConnectionPool;
@@ -8,6 +9,9 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+
+import static java.util.stream.Collectors.*;
 
 public class TicketDao {
 
@@ -128,6 +132,39 @@ public class TicketDao {
                 ticket.setId(generatedKeys.getLong("id"));
             }
             return ticket;
+        } catch (SQLException throwables) {
+            throw new DaoException(throwables);
+        }
+    }
+
+    public List<Ticket> findAll(TicketFilter filter) {
+        List<Object> parameters = new ArrayList<>();
+        List<String> whereSql = new ArrayList<>();
+        if (filter.seatNo() != null){
+            whereSql.add("seat_no LIKE ?");
+            parameters.add("%" + filter.seatNo() + "%");
+        }
+        if (filter.passengerName() != null){
+            whereSql.add("passenger_name = ?");
+            parameters.add(filter.passengerName());
+        }
+        parameters.add(filter.limit());
+        parameters.add(filter.offset());
+        var where = whereSql.stream()
+                .collect(joining(" AND ", "WHERE ", " LIMIT ? OFFSET ? "));
+        var sql = FIND_ALL_SQL + where;
+        try (var connection = ConnectionPool.get();
+             var preparedStatement = connection.prepareStatement(sql)) {
+            for (int i = 0; i < parameters.size(); i++) {
+                preparedStatement.setObject(i + 1, parameters.get(i));
+            }
+            System.out.println(preparedStatement);
+            var resultSet = preparedStatement.executeQuery();
+            List<Ticket> tickets = new ArrayList<>();
+            while (resultSet.next()) {
+                tickets.add(buildTicket(resultSet));
+            }
+            return tickets;
         } catch (SQLException throwables) {
             throw new DaoException(throwables);
         }
